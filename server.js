@@ -9,7 +9,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ['http://localhost:3000', 'https://your-render-app.onrender.com'],  // Replace with your actual Render URL
+    origin: ['http://localhost:3000', 'https://quiz-58if.onrender.com'],  // Replace with your actual Render URL
     methods: ['GET', 'POST']
   }
 });
