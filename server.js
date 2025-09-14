@@ -2,13 +2,19 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');
+const path = require('path');  // Added for absolute paths
 require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
+const io = new Server(server, {
+  cors: {
+    origin: ['http://localhost:3000', 'https://your-render-app.onrender.com'],  // Replace with your actual Render URL
+    methods: ['GET', 'POST']
+  }
+});
 
-app.use(express.static('client'));
+app.use(express.static(path.join(__dirname, 'client')));  // Updated to absolute path
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('Connected to MongoDB'))
@@ -22,6 +28,7 @@ const userSchema = new mongoose.Schema({
   avatar: String,
   genres: [String],
 });
+
 const User = mongoose.model('User', userSchema);
 
 const questions = [
@@ -119,7 +126,7 @@ io.on('connection', (socket) => {
     if (!socket.user.isGuest) {
       await User.updateOne(
         { id: socket.user.id },
-        { 
+        {
           avatar: userData.avatar,
           genres: userData.genres,
           firstname: userData.firstname,
@@ -220,12 +227,12 @@ io.on('connection', (socket) => {
     }
     const correct = answer === currentQuestion.correct;
     console.log('Answer correct:', correct, 'Selected:', answer, 'Correct:', currentQuestion.correct);
-    
+
     // Initialize scores if not exists
     if (!room.scores) {
       room.scores = room.players.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {});
     }
-    
+
     if (correct) {
       if (!room.answered) {
         // First correct answer gets 3 points
@@ -237,9 +244,9 @@ io.on('connection', (socket) => {
         room.scores[socket.id] = (room.scores[socket.id] || 0) + 1;
         console.log('Subsequent correct answer by:', socket.id, 'Score:', room.scores[socket.id]);
       }
-      
+
       // Check if any player has reached 15 points
-      const winner = Object.entries(room.scores).find(([_, score]) => score >= 15);
+      const winner = Object.entries(room.scores).find(([, score]) => score >= 15);
       if (winner) {
         const [winnerId, winnerScore] = winner;
         const winnerPlayer = room.players.find(p => p.id === winnerId);
@@ -247,20 +254,21 @@ io.on('connection', (socket) => {
         return;
       }
     }
-    
+
     // Mark this player as having answered
     if (!room.answeredPlayers) {
       room.answeredPlayers = new Set();
     }
     room.answeredPlayers.add(socket.id);
-    
+
     socket.emit('answer-result', { questionId, correct, answer, correctAnswer: currentQuestion.correct });
     io.to(room.id).emit('scores', Object.entries(room.scores).map(([id, score]) => [room.players.find(p => p.id === id).user.name, score]));
-    
+
     // Check if all players have answered
     if (room.answeredPlayers.size === room.players.length) {
       // Clear answered players for next question
       room.answeredPlayers.clear();
+
       // Move to next question immediately
       if (room.sendQuestion) {
         room.sendQuestion();
@@ -274,6 +282,7 @@ io.on('connection', (socket) => {
     let timePerQuestion = { Easy: 10, Medium: 15, Hard: 20 }[room.level] || 15;
     console.log('Emitting quiz-start to room:', room.id);
     io.to(room.id).emit('quiz-start', { isMultiplayer, timePerQuestion, puzzle: room.puzzle || false });
+
     let questionIndex = 0;
     room.scores = room.players.reduce((acc, p) => ({ ...acc, [p.id]: 0 }), {});
     room.answered = null;
@@ -291,8 +300,10 @@ io.on('connection', (socket) => {
 
       let availableQuestions = room.genres.includes('Mixed') ? questions : questions.filter(q => room.genres.includes(q.genre));
       console.log('Initial available questions (after genre filter):', availableQuestions.length, 'Genres:', room.genres);
+
       availableQuestions = availableQuestions.filter(q => q.level === room.level);
       console.log('After level filter:', availableQuestions.length, 'Level:', room.level);
+
       const used = usedQuestions.get(room.id) || [];
       availableQuestions = availableQuestions.filter(q => !used.includes(q.question));
       console.log('After used filter:', availableQuestions.length, 'Used questions:', used);
@@ -327,12 +338,15 @@ io.on('connection', (socket) => {
       const question = availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
       used.push(question.question);
       usedQuestions.set(room.id, used);
+
       console.log('Emitting question:', question.question, 'to room:', room.id);
       io.to(room.id).emit('question', { questionId: questionIndex, question: question.question, options: question.options, time: timePerQuestion });
+
       setTimeout(() => {
         console.log('Timeout triggered for next question, index:', questionIndex);
         room.sendQuestion();
       }, timePerQuestion * 1000 + 1000);
+
       questionIndex++;
     };
 
@@ -347,6 +361,7 @@ io.on('connection', (socket) => {
       const used = usedQuestions.get(room.id) || [];
       const currentQuestion = questions.find(q => q.question === used[questionIndex - 1]);
       if (!currentQuestion) return;
+
       if (isMultiplayer) {
         if (player.hintsLeft > 0) {
           player.hintsLeft--;
@@ -375,6 +390,7 @@ io.on('connection', (socket) => {
       const used = usedQuestions.get(room.id) || [];
       const currentQuestion = questions.find(q => q.question === used[questionIndex - 1]);
       if (!currentQuestion) return;
+
       player.costHints = (player.costHints || 0) + 1;
       const cost = player.costHints === 1 ? 2 : player.costHints === 2 ? 3 : 6;
       timePerQuestion = Math.max(5, timePerQuestion - cost);
@@ -390,25 +406,26 @@ io.on('connection', (socket) => {
     }
 
     console.log('Ending quiz for room:', room.id, 'Scores:', scores);
+
     if (room.players.length > 1) {
       const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-      
+
       // Get player names from room.players
       const getPlayerName = (playerId) => {
         const player = room.players.find(p => p.id === playerId);
         return player?.user?.name || 'Unknown Player';
       };
 
-      const winner = winnerData || { 
+      const winner = winnerData || {
         name: getPlayerName(sorted[0][0]),
-        score: sorted[0][1] 
+        score: sorted[0][1]
       };
-      
-      const runner = sorted[1] ? { 
+
+      const runner = sorted[1] ? {
         name: getPlayerName(sorted[1][0]),
-        score: sorted[1][1] 
+        score: sorted[1][1]
       } : null;
-      
+
       const others = sorted.slice(2).map(([id, score]) => ({
         name: getPlayerName(id),
         score
@@ -421,13 +438,13 @@ io.on('connection', (socket) => {
       const player = room.players[0];
       const playerName = player?.user?.name || 'You';
       console.log('Sending single player results:', { name: playerName, score: scores[player.id] });
-      io.to(room.id).emit('results', { 
+      io.to(room.id).emit('results', {
         name: playerName,
         score: scores[player.id]
       });
       rooms = rooms.filter(r => r.id !== room.id);
     }
-    
+
     // Mark that results have been sent for this room
     room.resultsSent = true;
     usedQuestions.delete(room.id);
@@ -460,6 +477,7 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(3005, () => {
-  console.log('Server running on http://localhost:3005/');
+const PORT = process.env.PORT || 3000;  // Updated for Render
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
