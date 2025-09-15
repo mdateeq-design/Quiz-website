@@ -2,19 +2,25 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');
-const path = require('path');  // Added for absolute paths
 require('dotenv').config();
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ['http://localhost:3000', 'https://quiz-58if.onrender.com'],  // Replace with your actual Render URL
+    origin: ['https://quiz-58if.onrender.com'], // Only your deployed client
     methods: ['GET', 'POST']
   }
 });
 
-app.use(express.static(path.join(__dirname, 'client')));  // Updated to absolute path
+// Serve static files from the client folder (absolute path)
+app.use(express.static(path.join(__dirname, 'client')));
+
+// Catch-all route for SPA support
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'client', 'index.html'));
+});
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('Connected to MongoDB'))
@@ -477,7 +483,9 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 3000;  // Updated for Render
+// Change this line to use Render's port:
+const PORT = process.env.PORT || 3005;
+
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}/`);
 });
