@@ -505,21 +505,8 @@
     }
   </style>
 
-  <script src="src=https://cdn.socket.io/4.7.5/socket.io.min.js">
-     // Connect socket.io on deployed URL
-  const socket = io("https://quiz-58if.onrender.com", {
-    transports: ['websocket', 'polling']
-  });
-
-  socket.on('connect', () => {
-    console.log('Socket.io connected!');
-  });
-
-  socket.on('connect_error', (err) => {
-    console.error('Socket.io connection error:', err);
-  });
-
-  // Your existing client-side logic here...
+  <script>
+    const socket = io('http://localhost:3005');
     let user = { id: null, name: '', avatar: '', genres: [], isGuest: false };
     let currentRoom = null;
     let hintsLeft = 0;
